@@ -28,8 +28,8 @@
  *
  */
 
-#include "zzip-file.h"
-#include "zziplib.h"
+#include <zzip/file.h>
+#include <zzip/zzip.h>
 
 #include "httpd.h"
 #include "http_request.h"
