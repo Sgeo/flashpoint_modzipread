@@ -129,8 +129,8 @@ static int zipread_showfile(request_rec * r, char *fname)
 		if (fp)
 		{
 			int len;
-			char buf[32769];
-			while ((len = zzip_file_read (fp, buf, 32768)))
+			char buf[2];
+			while ((len = zzip_file_read (fp, buf, 1)))
 			{
 				ap_rwrite (buf, len, r);
 			}
