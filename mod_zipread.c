@@ -28,8 +28,9 @@
  *
  */
 
-#include <zzip/file.h>
-#include <zzip/zzip.h>
+#include <stdio.h>
+
+#include <zip.h>
 
 #include "httpd.h"
 #include "http_request.h"
@@ -40,6 +41,11 @@
 #include "apr_strings.h"
 
 #include "util_script.h"
+
+void mylog(const char* str) {
+	printf(str);
+	fflush(stdout);
+}
 
 module AP_MODULE_DECLARE_DATA zipread_module;
 
@@ -105,7 +111,9 @@ char * zipread_getcontenttype(request_rec * r, char *pi)
 static int zipread_showfile(request_rec * r, char *fname)
 {
 	char *zipfile,*name;
-	ZZIP_DIR *dir;
+	zip_t *dir;
+
+	mylog("Inside zipread_showfile\n");
 
 	if (!r->path_info) return(HTTP_NOT_FOUND);
 	zipfile = r->filename;
@@ -119,27 +127,49 @@ static int zipread_showfile(request_rec * r, char *fname)
 		//ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Trying to read : %s %s %s", name, r->path_info, fname);
 	}
 
+	mylog("Allocated name");
+
 	r->content_type = zipread_getcontenttype(r, name);
 	name ++;
 
-	dir = zzip_dir_open (zipfile, 0);
+	mylog("Incremented main ?!? to\n");
+
+	mylog(name);
+
+	mylog("zipfile: ");
+	mylog(zipfile);
+	mylog("\n");
+
+	dir = zip_open(zipfile, 0, NULL);
 	if (dir)
 	{
-		ZZIP_FILE *fp = zzip_file_open (dir, name, 0);
+		mylog("Inside a dir\n");
+		zip_file_t *fp = zip_fopen (dir, name, 0);
 		if (fp)
 		{
-			int len;
-			char buf[32769];
-			while ((len = zzip_file_read (fp, buf, 32768)))
-			{
+			mylog("Got an fp\n");
+			zip_int64_t len;
+			mylog("Allocated len\n");
+			char *buf = calloc(32769, 1);
+			mylog("Allocated buf\n");
+			len = 0;
+			do {
+				mylog("Doing...\n");
+				printf("%p\n", fp);
+				printf("%s\n", buf);
+				fflush(stdout);
+				len = zip_fread (fp, buf, 1);
+				if(len <= 0) break;
+				mylog("Writing...\n");
 				ap_rwrite (buf, len, r);
-			}
-			zzip_file_close (fp);
+			} while (len > 0);
+			zip_fclose (fp);
 		}
 		else return(HTTP_NOT_FOUND);
-		zzip_dir_close (dir);
+		zip_close (dir);
 	}
 	else return(HTTP_NOT_FOUND);
+	mylog("Returning ok\n");
 	return(OK);
 }
 
@@ -190,92 +220,93 @@ void zipread_showentry(request_rec * r, char *list, int dir_found, int pi_start)
 
 static int zipread_showlist(request_rec *r, char *filtre)
 {
-	char *filename = r->filename;
-	char *pathinfo = r->path_info;
-	int flag_filtre=0;
-	ZZIP_DIR *dir = zzip_dir_open (filename, 0);
+	
+	// char *filename = r->filename;
+	// char *pathinfo = r->path_info;
+	// int flag_filtre=0;
+	// ZZIP_DIR *dir = zzip_dir_open (filename, 0);
 
-	if ((filtre) && (*filtre)) flag_filtre=1;
+	// if ((filtre) && (*filtre)) flag_filtre=1;
 
-	if (dir)
-	{
-		ZZIP_DIRENT dirent;
-		int pi_start;
-		char *old;
-		char *ppdir;
-		int i;
-		apr_array_header_t * arr = apr_array_make(r->pool, 0, sizeof(char *));
-		char **list;
+	// if (dir)
+	// {
+	// 	ZZIP_DIRENT dirent;
+	// 	int pi_start;
+	// 	char *old;
+	// 	char *ppdir;
+	// 	int i;
+	// 	apr_array_header_t * arr = apr_array_make(r->pool, 0, sizeof(char *));
+	// 	char **list;
 
-		r->content_type = "text/html";
-		zipread_showheader(r,r->uri);
-		ppdir = apr_pstrdup(r->pool, "");
-		if ((pathinfo) && (strlen(pathinfo) >=2))
-		{
-			int i;
-			for (i = strlen(pathinfo)-2 ; i >= 1 ; i--)
-			{
-				if (pathinfo[i] == '/')
-				{
-					ppdir = apr_pstrndup(r->pool, pathinfo, i);
-					break;
-				}
-			}
-		}
-		old = "";
+	// 	r->content_type = "text/html";
+	// 	zipread_showheader(r,r->uri);
+	// 	ppdir = apr_pstrdup(r->pool, "");
+	// 	if ((pathinfo) && (strlen(pathinfo) >=2))
+	// 	{
+	// 		int i;
+	// 		for (i = strlen(pathinfo)-2 ; i >= 1 ; i--)
+	// 		{
+	// 			if (pathinfo[i] == '/')
+	// 			{
+	// 				ppdir = apr_pstrndup(r->pool, pathinfo, i);
+	// 				break;
+	// 			}
+	// 		}
+	// 	}
+	// 	old = "";
 
-		// find the start of pathinfo in r->uri
-		if (pathinfo)
-			pi_start = ap_find_path_info(r->uri, r->path_info);
-		else
-			pi_start = strlen(r->uri);
+	// 	// find the start of pathinfo in r->uri
+	// 	if (pathinfo)
+	// 		pi_start = ap_find_path_info(r->uri, r->path_info);
+	// 	else
+	// 		pi_start = strlen(r->uri);
 
-		ap_rprintf(r,"<img src=\"/icons/back.gif\" alt=\"[BCK]\" /><A HREF=\"%s%s/\">%s</A>\n",apr_pstrndup(r->pool, r->uri, pi_start), ppdir,"Parent Directory");
-		while (zzip_dir_read (dir, &dirent))
-		{
-			if ((flag_filtre == 0) || (!strncmp (dirent.d_name, filtre, strlen (filtre) )))
-			{
-				char **new;
-				new = (char **) apr_array_push(arr);
-				*new = apr_pstrdup(r->pool, dirent.d_name);
+	// 	ap_rprintf(r,"<img src=\"/icons/back.gif\" alt=\"[BCK]\" /><A HREF=\"%s%s/\">%s</A>\n",apr_pstrndup(r->pool, r->uri, pi_start), ppdir,"Parent Directory");
+	// 	while (zzip_dir_read (dir, &dirent))
+	// 	{
+	// 		if ((flag_filtre == 0) || (!strncmp (dirent.d_name, filtre, strlen (filtre) )))
+	// 		{
+	// 			char **new;
+	// 			new = (char **) apr_array_push(arr);
+	// 			*new = apr_pstrdup(r->pool, dirent.d_name);
 
-			}
-		}
-		list = (char **)arr->elts;
+	// 		}
+	// 	}
+	// 	list = (char **)arr->elts;
 
-		// Sort the list of files we contruscted
-		qsort((void *)list, arr->nelts, sizeof(char *), zipread_cmp);
+	// 	// Sort the list of files we contruscted
+	// 	qsort((void *)list, arr->nelts, sizeof(char *), zipread_cmp);
 
-		// Show the list of files and remove the duplicates
-		for (i=0; i < arr->nelts; i++)
-		{
-			int dir_found=0;
-			char *p1;
-			int decalage = 0;
+	// 	// Show the list of files and remove the duplicates
+	// 	for (i=0; i < arr->nelts; i++)
+	// 	{
+	// 		int dir_found=0;
+	// 		char *p1;
+	// 		int decalage = 0;
 			
-			if (flag_filtre) decalage = strlen(filtre);
-			if ((p1 = strchr(list[i] + decalage + 1, '/')))
-			{
-				dir_found=1;
-				*(p1+1)='\0';
-			}
-			if (strcmp(list[i],old))
-			{
-				if (list[i][strlen(list[i])-1] == '/')
-				{
-					dir_found = 1;
-					if (filtre)
-						if (!strcmp(list[i], filtre)) continue;
-					list[i][strlen(list[i])-1] = '\0';
-				}
-				zipread_showentry(r, list[i], dir_found, pi_start);
-				list[i][strlen(list[i])] = '/';
-				old = apr_pstrdup(r->pool, list[i]);
-			}
-		}
-		ap_rputs("<hr /></pre>mod_zipread on Apache 2.0 (build on "__DATE__ " " __TIME__ ")\n</body></html>", r);
-		zzip_dir_close (dir);
-	}
+	// 		if (flag_filtre) decalage = strlen(filtre);
+	// 		if ((p1 = strchr(list[i] + decalage + 1, '/')))
+	// 		{
+	// 			dir_found=1;
+	// 			*(p1+1)='\0';
+	// 		}
+	// 		if (strcmp(list[i],old))
+	// 		{
+	// 			if (list[i][strlen(list[i])-1] == '/')
+	// 			{
+	// 				dir_found = 1;
+	// 				if (filtre)
+	// 					if (!strcmp(list[i], filtre)) continue;
+	// 				list[i][strlen(list[i])-1] = '\0';
+	// 			}
+	// 			zipread_showentry(r, list[i], dir_found, pi_start);
+	// 			list[i][strlen(list[i])] = '/';
+	// 			old = apr_pstrdup(r->pool, list[i]);
+	// 		}
+	// 	}
+	// 	ap_rputs("<hr /></pre>mod_zipread on Apache 2.0 (build on "__DATE__ " " __TIME__ ")\n</body></html>", r);
+	// 	zzip_dir_close (dir);
+	// }
 	return(OK);
 }
 
@@ -283,6 +314,7 @@ static int zipread_showlist(request_rec *r, char *filtre)
 
 static int zipread_handler (request_rec * r)
 {
+	mylog("Can I at least log from zipread_handler?\n");
 	char *pathinfo = r->path_info;
 	char *filtre=NULL;
 	int flag_filtre = 0;
