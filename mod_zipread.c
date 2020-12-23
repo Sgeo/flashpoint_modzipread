@@ -125,12 +125,12 @@ static int zipread_showfile(request_rec * r, char *fname)
 	dir = zzip_dir_open (zipfile, 0);
 	if (dir)
 	{
-		ZZIP_FILE *fp = zzip_file_open (dir, name, 0);
+		ZZIP_FILE *fp = zzip_file_open (dir, name, ZZIP_CASELESS);
 		if (fp)
 		{
 			int len;
-			char buf[32768];
-			while ((len = zzip_file_read (fp, buf, 32768)))
+			char buf[ZZIP_32K];
+			while ((len = zzip_file_read (fp, buf, ZZIP_32K)))
 			{
 				ap_rwrite (buf, len, r);
 			}
