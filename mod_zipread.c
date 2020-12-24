@@ -41,6 +41,7 @@
 #include "http_log.h"
 #include "ap_config.h"
 #include "apr_strings.h"
+#include "apr_thread_mutex.h"
 
 #include "util_script.h"
 
@@ -109,6 +110,8 @@ char * zipread_getcontenttype(request_rec * r, char *pi)
 
 // zipread_showfile : send a file (with its correct content-type) to the browser
 
+static apr_thread_mutex_t *zip_mutex;
+
 static int zipread_showfile(request_rec * r, char *fname)
 {
 	char *zipfile,*name;
@@ -130,13 +133,15 @@ static int zipread_showfile(request_rec * r, char *fname)
 	r->content_type = zipread_getcontenttype(r, name);
 	name ++;
 
+
 	clock_t before = clock();
-	dir = cached_zip_open(zipfile, 0, NULL);
+	apr_thread_mutex_lock(zip_mutex);
+	dir = cached_zip_open(zipfile, ZIP_RDONLY, NULL);
 	clock_t after = clock();
 	printf("Open took: %ld milliseconds\n", (after - before));
 	if (dir)
 	{
-		zip_file_t *fp = zip_fopen (dir, name, 0);
+		zip_file_t *fp = zip_fopen (dir, name, ZIP_FL_NOCASE);
 		if (fp)
 		{
 			zip_int64_t len;
@@ -149,10 +154,17 @@ static int zipread_showfile(request_rec * r, char *fname)
 				ap_rwrite (buf, len, r);
 			} while (len > 0);
 			zip_fclose (fp);
+			apr_thread_mutex_unlock(zip_mutex);
 		}
-		else return(HTTP_NOT_FOUND);
+		else {
+			apr_thread_mutex_unlock(zip_mutex);
+			return(HTTP_NOT_FOUND);
+		}
 	}
-	else return(HTTP_NOT_FOUND);
+	else {
+		apr_thread_mutex_unlock(zip_mutex);
+		return(HTTP_NOT_FOUND);
+	}
 	return(OK);
 }
 
@@ -301,6 +313,9 @@ static int zipread_handler (request_rec * r)
 	char *filtre=NULL;
 	int flag_filtre = 0;
 
+	printf("Unparsed URI: %s\nURI: %s\n", r->unparsed_uri, r->uri);
+	fflush(stdout);
+
 	if (strcmp (r->handler, "zipread"))
 		return DECLINED;
 
@@ -345,6 +360,7 @@ static int zipread_handler (request_rec * r)
 static void zipread_register_hooks (apr_pool_t * p)
 {
 	initialize_zip_cache(p);
+	apr_thread_mutex_create(&zip_mutex, APR_THREAD_MUTEX_UNNESTED, p);
 	ap_hook_handler (zipread_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
