@@ -32,6 +32,8 @@
 
 #include <zip.h>
 
+#include <time.h>
+
 #include "httpd.h"
 #include "http_request.h"
 #include "http_config.h"
@@ -41,6 +43,8 @@
 #include "apr_strings.h"
 
 #include "util_script.h"
+
+#include "cached_zip.h"
 
 
 
@@ -126,8 +130,10 @@ static int zipread_showfile(request_rec * r, char *fname)
 	r->content_type = zipread_getcontenttype(r, name);
 	name ++;
 
-
-	dir = zip_open(zipfile, 0, NULL);
+	clock_t before = clock();
+	dir = cached_zip_open(zipfile, 0, NULL);
+	clock_t after = clock();
+	printf("Open took: %ld milliseconds\n", (after - before));
 	if (dir)
 	{
 		zip_file_t *fp = zip_fopen (dir, name, 0);
@@ -145,7 +151,6 @@ static int zipread_showfile(request_rec * r, char *fname)
 			zip_fclose (fp);
 		}
 		else return(HTTP_NOT_FOUND);
-		zip_close (dir);
 	}
 	else return(HTTP_NOT_FOUND);
 	return(OK);
@@ -339,6 +344,7 @@ static int zipread_handler (request_rec * r)
 
 static void zipread_register_hooks (apr_pool_t * p)
 {
+	initialize_zip_cache(p);
 	ap_hook_handler (zipread_handler, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
