@@ -42,10 +42,7 @@
 
 #include "util_script.h"
 
-void mylog(const char* str) {
-	printf(str);
-	fflush(stdout);
-}
+
 
 module AP_MODULE_DECLARE_DATA zipread_module;
 
@@ -113,7 +110,6 @@ static int zipread_showfile(request_rec * r, char *fname)
 	char *zipfile,*name;
 	zip_t *dir;
 
-	mylog("Inside zipread_showfile\n");
 
 	if (!r->path_info) return(HTTP_NOT_FOUND);
 	zipfile = r->filename;
@@ -127,40 +123,23 @@ static int zipread_showfile(request_rec * r, char *fname)
 		//ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Trying to read : %s %s %s", name, r->path_info, fname);
 	}
 
-	mylog("Allocated name");
-
 	r->content_type = zipread_getcontenttype(r, name);
 	name ++;
 
-	mylog("Incremented main ?!? to\n");
-
-	mylog(name);
-
-	mylog("zipfile: ");
-	mylog(zipfile);
-	mylog("\n");
 
 	dir = zip_open(zipfile, 0, NULL);
 	if (dir)
 	{
-		mylog("Inside a dir\n");
 		zip_file_t *fp = zip_fopen (dir, name, 0);
 		if (fp)
 		{
-			mylog("Got an fp\n");
 			zip_int64_t len;
-			mylog("Allocated len\n");
-			char *buf = calloc(32769, 1);
-			mylog("Allocated buf\n");
+			char buf[32768];
 			len = 0;
 			do {
-				mylog("Doing...\n");
-				printf("%p\n", fp);
-				printf("%s\n", buf);
 				fflush(stdout);
-				len = zip_fread (fp, buf, 1);
+				len = zip_fread (fp, buf, 32768);
 				if(len <= 0) break;
-				mylog("Writing...\n");
 				ap_rwrite (buf, len, r);
 			} while (len > 0);
 			zip_fclose (fp);
@@ -169,7 +148,6 @@ static int zipread_showfile(request_rec * r, char *fname)
 		zip_close (dir);
 	}
 	else return(HTTP_NOT_FOUND);
-	mylog("Returning ok\n");
 	return(OK);
 }
 
@@ -314,7 +292,6 @@ static int zipread_showlist(request_rec *r, char *filtre)
 
 static int zipread_handler (request_rec * r)
 {
-	mylog("Can I at least log from zipread_handler?\n");
 	char *pathinfo = r->path_info;
 	char *filtre=NULL;
 	int flag_filtre = 0;

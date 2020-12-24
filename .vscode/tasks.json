@@ -11,10 +11,11 @@
                 "/Fe:",
                 "${fileDirname}\\${fileBasenameNoExtension}.so",
                 "${file}",
-                "vcpkg\\installed\\x86-windows\\lib\\*.lib",
+                "vcpkg\\installed\\x86-windows-static\\lib\\*.lib",
                 "apache\\lib\\*.lib",
+                "advapi32.lib",
                 "/Iapache\\include",
-                "/Ivcpkg\\installed\\x86-windows\\include\\",
+                "/Ivcpkg\\installed\\x86-windows-static\\include\\",
                 "/link /MACHINE:X86 /export:zipread_module,DATA"
             ],
             "options": {
